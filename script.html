@@ -1,0 +1,81 @@
+<script>
+(function() {
+    // Only run in development
+    if (location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
+        return;
+    }
+    
+    let ws = null;
+    let initialStartTime = null;
+    let reconnectAttempts = 0;
+    let maxReconnectAttempts = 50;
+    
+    function connect() {
+        try {
+            ws = new WebSocket('ws://' + location.host + '/ws/livereload');
+            
+            ws.onopen = function() {
+                console.log('?? Live reload connected - watching for server restarts...');
+                reconnectAttempts = 0;
+            };
+            
+            ws.onmessage = function(event) {
+                try {
+                    const data = JSON.parse(event.data);
+                    
+                    if (data.type === 'server-info') {
+                        if (initialStartTime === null) {
+                            initialStartTime = data.startTime;
+                        } else if (data.startTime !== initialStartTime) {
+                            console.log('?? Server restarted - refreshing page...');
+                            location.reload();
+                            return;
+                        }
+                    }
+                } catch (err) {
+                    console.error('Error parsing WebSocket message:', err);
+                }
+            };
+            
+            ws.onclose = function() {
+                console.log('??  Live reload disconnected - attempting to reconnect...');
+                
+                if (reconnectAttempts < maxReconnectAttempts) {
+                    reconnectAttempts++;
+                    setTimeout(connect, 1000);
+                } else {
+                    console.log('? Max reconnection attempts reached');
+                }
+            };
+            
+            ws.onerror = function(error) {
+                console.log('?? WebSocket error - server may be restarting...');
+            };
+            
+        } catch (error) {
+            console.error('Failed to create WebSocket connection:', error);
+            if (reconnectAttempts < maxReconnectAttempts) {
+                reconnectAttempts++;
+                setTimeout(connect, 1000);
+            }
+        }
+    }
+    
+    function startPingInterval() {
+        setInterval(function() {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ type: 'ping' }));
+            }
+        }, 5000);
+    }
+    
+    connect();
+    startPingInterval();
+    
+    window.addEventListener('beforeunload', function() {
+        if (ws) {
+            ws.close();
+        }
+    });
+})();
+</script>
