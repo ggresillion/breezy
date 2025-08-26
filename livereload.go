@@ -1,4 +1,4 @@
-package livereload
+package breezy
 
 import (
 	"bytes"
